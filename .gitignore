@@ -1,0 +1,7 @@
+dataset/
+*.h5
+*.fits
+
+plots/
+__pycache__/
+*.pyc
