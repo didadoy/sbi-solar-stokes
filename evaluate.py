@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from models import SolarFlowModel
 from tqdm import tqdm
 
-CHECKPOINT_PATH = './checkpoints_multimodal/multimodal_ep50.pth'
+CHECKPOINT_PATH = './checkpoints_physical_noise/multimodal_ep50.pth'
 STATS_FILE = 'normalization_stats.npz'
 DATA_MASTER = './dataset/multimodal_stokes_testing.h5'
 DATA_MODELS = './dataset/database_models/models_testing.h5'
@@ -160,11 +160,75 @@ def plot_error_vs_depth(reals, preds, logtau):
         ax.set_xlabel('log(tau)')
         ax.set_ylabel('Absolute Error')
         ax.grid(True, alpha=0.3)
-        ax.invert_xaxis()
+        
+        ax.set_xticks([1, 0, -1, -2, -3, -4, -5, -6, -7])
+        if not ax.xaxis_inverted():
+            ax.invert_xaxis()
+            
         if i == 0: ax.legend()
         
     plt.tight_layout()
     plt.savefig(f"{PLOTS_DIR}/error_vs_depth.png", dpi=300)
+    plt.close()
+
+@torch.no_grad()
+def generate_dropout_figure(model, stokes_batch, region_batch, reals, logtau, s_mean, s_std, m_mean, m_std, steps=30, num_trajectories=50):
+    """
+    Genera inferencia con Modality Dropout manual (solo ve Fe I 630 nm).
+    """
+    model.eval()
+    
+    stokes_t = torch.from_numpy(stokes_batch[0:1]).float().to(DEVICE)
+    region_t = torch.from_numpy(region_batch[0:1]).to(DEVICE)
+    real_atmos = reals[0]
+    
+    s_mean_t = torch.from_numpy(s_mean).float().to(DEVICE).unsqueeze(0)
+    s_std_t = torch.from_numpy(s_std).float().to(DEVICE).unsqueeze(0)
+    
+    stokes_norm = (stokes_t - s_mean_t) / (s_std_t + 1e-6)
+    
+    mask = (region_t > 0).to(DEVICE)
+    
+    context = model.encoder(stokes_norm, region_t, padding_mask=mask)
+    
+    trajectories = []
+    
+    for _ in tqdm(range(num_trajectories), desc="Sampling Trajectories"):
+        x_t = torch.randn(1, 80, 6).to(DEVICE)
+        dt = 1.0 / steps
+        for i in range(steps):
+            t_tensor = torch.full((1, 1), i / steps, device=DEVICE)
+            velocity = model.vector_field(t_tensor, x_t, context)
+            x_t = x_t + velocity * dt
+            
+        pred_denorm = x_t.cpu().numpy()[0] * m_std[0, 0, :] + m_mean[0, 0, :]
+        trajectories.append(pred_denorm)
+        
+    trajectories = np.array(trajectories)
+    mean_pred = np.mean(trajectories, axis=0)
+    
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig.suptitle('Inference under Modality Dropout (Only Fe I 630 nm) - 50 trajectories', fontsize=16)
+    
+    for i, ax in enumerate(axes.flatten()):
+        for j in range(num_trajectories):
+            ax.plot(logtau, trajectories[j, :, i], 'r-', alpha=0.1)
+            
+        ax.plot(logtau, mean_pred[:, i], 'r--', linewidth=2, label='AI Mean')
+        ax.plot(logtau, real_atmos[:, i], 'k-', linewidth=2, label='Real')
+        
+        ax.set_title(PHYSICAL_LABELS[i])
+        ax.set_xlabel('log(tau)')
+        ax.grid(True, alpha=0.3)
+        
+        ax.set_xticks([1, 0, -1, -2, -3, -4, -5, -6, -7])
+        if not ax.xaxis_inverted():
+            ax.invert_xaxis()
+            
+        if i == 0: ax.legend()
+        
+    plt.tight_layout()
+    plt.savefig(f"{PLOTS_DIR}/multimodal_inference_dropout_550.png", dpi=300)
     plt.close()
 
 def main():
@@ -172,15 +236,18 @@ def main():
         model = SolarFlowModel(CONFIG).to(DEVICE)
         model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=True))
     except FileNotFoundError:
+        print(f"Checkpoint no encontrado en {CHECKPOINT_PATH}")
         return
 
     s_mean, s_std, m_mean, m_std = setup()
     stokes, reals, logtau, region_ids, lengths = get_eval_batch(NUM_EVAL_SAMPLES)
-    preds = run_evaluation(model, stokes, region_ids, s_mean, s_std, m_mean, m_std, steps=30)
     
+    preds = run_evaluation(model, stokes, region_ids, s_mean, s_std, m_mean, m_std, steps=30)
     calculate_and_save_metrics(reals, preds, logtau)
     plot_scatter_density(reals, preds, logtau)
     plot_error_vs_depth(reals, preds, logtau)
+    
+    generate_dropout_figure(model, stokes, region_ids, reals, logtau, s_mean, s_std, m_mean, m_std)
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,7 @@ import h5py
 from scipy.signal import savgol_filter
 from models import SolarFlowModel
 
-CHECKPOINT_PATH = './checkpoints_multimodal/multimodal_ep50.pth'
+CHECKPOINT_PATH = './checkpoints_physical_noise/multimodal_ep50.pth'
 STATS_FILE = 'normalization_stats.npz'
 
 DATA_MASTER = './dataset/multimodal_stokes_testing.h5' 
@@ -121,13 +121,37 @@ def plot_results(real_stokes, real_phys, preds_phys, logtau, sample_idx):
         for n in range(NUM_SAMPLES):
             ax.plot(logtau, preds_phys[n, :, p_idx], 'r-', alpha=0.15)
             
-        ax.plot(logtau, preds_mean[:, p_idx], 'r--', linewidth=2, label='IA Mean')
-        
+        ax.plot(logtau, preds_mean[:, p_idx], 'r--', linewidth=2, label='AI Mean')
         ax.plot(logtau, real_phys[:, p_idx], 'k-', linewidth=2, label='Real')
         
         ax.set_title(phys_labels[i])
         ax.set_xlabel('log(tau)')
         ax.grid(True, alpha=0.3)
+        
+        # --- NUEVA SOLUCIÓN: Percentiles ---
+        # Cogemos el 96% central de las predicciones para ignorar picos locos
+        p_min = np.percentile(preds_phys[:, :, p_idx], 2)
+        p_max = np.percentile(preds_phys[:, :, p_idx], 98)
+        
+        # También miramos dónde está la realidad
+        r_min = real_phys[:, p_idx].min()
+        r_max = real_phys[:, p_idx].max()
+        
+        # El límite final abarca la realidad y el 96% de la IA
+        y_min = min(p_min, r_min)
+        y_max = max(p_max, r_max)
+        
+        rango = y_max - y_min
+        if rango == 0: rango = 1.0
+        
+        # Le damos un pelín de aire (10%) por arriba y por abajo
+        ax.set_ylim(y_min - (rango * 0.1), y_max + (rango * 0.1))
+        # -----------------------------------
+
+        ax.set_xticks([1, 0, -1, -2, -3, -4, -5, -6, -7])
+        if not ax.xaxis_inverted():
+            ax.invert_xaxis()
+        
         if i == 0: ax.legend()
         
     plt.tight_layout()
@@ -138,6 +162,7 @@ def main():
         model = SolarFlowModel(CONFIG).to(DEVICE)
         model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=True))
     except FileNotFoundError:
+        print(f"No se encontró el modelo en {CHECKPOINT_PATH}")
         return
 
     idx = 550
