@@ -5,11 +5,11 @@ from pathlib import Path
 from tqdm import tqdm
 
 DATA_DIR = Path('./dataset')
-FILE_630 = DATA_DIR / 'database_630/stokes_testing.h5'
-FILE_CAII = DATA_DIR / 'database_caii/synthetic_CaII_8542_testing.fits'
-FILE_CAII_K = DATA_DIR / 'database_caii_k/synthetic_CaII_K_testing.fits'
+FILE_630 = DATA_DIR / 'database_630/stokes_training.h5'
+FILE_CAII = DATA_DIR / 'database_caii/synthetic_CaII_8542_training.fits'
+FILE_CAII_K = DATA_DIR / 'database_caii_k/synthetic_CaII_K_training.fits'
 
-OUTPUT_FILE = DATA_DIR / 'multimodal_stokes_testing.h5'
+OUTPUT_FILE = DATA_DIR / 'multimodal_stokes_training.h5'
 
 def normalize_batch(data):
     """

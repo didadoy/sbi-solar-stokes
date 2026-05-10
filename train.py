@@ -16,7 +16,7 @@ CONFIG = {
     'physical_dim': 6,
     'depth_points': 80,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'save_dir': './checkpoints_multimodal'
+    'save_dir': './checkpoints_physical_noise'
 }
 
 def create_modality_dropout_mask(batch_lengths, dropout_prob=0.3):
@@ -67,8 +67,6 @@ def train():
             region_ids = region_ids.to(CONFIG['device'])
             
             batch_size = x_1.shape[0]
-            
-            stokes = stokes + torch.randn_like(stokes) * 1e-3
             
             padding_mask = create_modality_dropout_mask(lengths, dropout_prob=0.3).to(CONFIG['device'])
             

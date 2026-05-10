@@ -41,6 +41,8 @@ class MultimodalSolarDataset(Dataset):
             stokes_concat = np.concatenate([s_630, s_caii, s_caiik], axis=1)
             stokes_tensor = torch.from_numpy(stokes_concat).float()
             
+            stokes_tensor = stokes_tensor + torch.randn_like(stokes_tensor) * 1e-3
+            
             L_630 = s_630.shape[1]
             L_caii = s_caii.shape[1]
             L_caiik = s_caiik.shape[1]
