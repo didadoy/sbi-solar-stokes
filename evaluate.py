@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from models import SolarFlowModel
 from tqdm import tqdm
 
-CHECKPOINT_PATH = './checkpoints_physical_noise/multimodal_ep50.pth'
+CHECKPOINT_PATH = './checkpoints_multimodal/multimodal_ep50.pth'
 STATS_FILE = 'normalization_stats.npz'
 DATA_MASTER = './dataset/multimodal_stokes_testing.h5'
 DATA_MODELS = './dataset/database_models/models_testing.h5'

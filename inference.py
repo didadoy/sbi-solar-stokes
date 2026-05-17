@@ -128,25 +128,19 @@ def plot_results(real_stokes, real_phys, preds_phys, logtau, sample_idx):
         ax.set_xlabel('log(tau)')
         ax.grid(True, alpha=0.3)
         
-        # --- NUEVA SOLUCIÓN: Percentiles ---
-        # Cogemos el 96% central de las predicciones para ignorar picos locos
         p_min = np.percentile(preds_phys[:, :, p_idx], 2)
         p_max = np.percentile(preds_phys[:, :, p_idx], 98)
         
-        # También miramos dónde está la realidad
         r_min = real_phys[:, p_idx].min()
         r_max = real_phys[:, p_idx].max()
-        
-        # El límite final abarca la realidad y el 96% de la IA
+
         y_min = min(p_min, r_min)
         y_max = max(p_max, r_max)
         
         rango = y_max - y_min
         if rango == 0: rango = 1.0
         
-        # Le damos un pelín de aire (10%) por arriba y por abajo
         ax.set_ylim(y_min - (rango * 0.1), y_max + (rango * 0.1))
-        # -----------------------------------
 
         ax.set_xticks([1, 0, -1, -2, -3, -4, -5, -6, -7])
         if not ax.xaxis_inverted():
