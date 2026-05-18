@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from models import SolarFlowModel
 from tqdm import tqdm
 
-CHECKPOINT_PATH = './checkpoints_multimodal/multimodal_ep50.pth'
+CHECKPOINT_PATH = './checkpoints_physical_noise/multimodal_ep50.pth'
 STATS_FILE = 'normalization_stats.npz'
 DATA_MASTER = './dataset/multimodal_stokes_testing.h5'
 DATA_MODELS = './dataset/database_models/models_testing.h5'
@@ -15,6 +15,7 @@ PLOTS_DIR = './plots'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 NUM_EVAL_SAMPLES = 500 
+NUM_ENSEMBLES = 50
 LOGTAU_MIN = -3.0
 LOGTAU_MAX = 0.0
 
@@ -61,7 +62,7 @@ def get_eval_batch(num_samples):
     return stokes_concat, physical, logtau, region_batch, (L0, L1, L2)
 
 @torch.no_grad()
-def run_evaluation(model, stokes_batch, region_batch, s_mean, s_std, m_mean, m_std, steps=30):
+def run_evaluation(model, stokes_batch, region_batch, s_mean, s_std, m_mean, m_std, steps=30, num_ensembles=50):
     model.eval()
     
     stokes_t = torch.from_numpy(stokes_batch).float().to(DEVICE)
@@ -75,16 +76,22 @@ def run_evaluation(model, stokes_batch, region_batch, s_mean, s_std, m_mean, m_s
     mask = torch.zeros((B, L), dtype=torch.bool).to(DEVICE)
     
     context = model.encoder(stokes_norm, region_t, padding_mask=mask)
-    x_t = torch.randn(B, 80, 6).to(DEVICE)
-    dt = 1.0 / steps
     
-    for i in tqdm(range(steps), desc="ODE Solving"):
-        t_tensor = torch.full((B, 1), i / steps, device=DEVICE)
-        velocity = model.vector_field(t_tensor, x_t, context)
-        x_t = x_t + velocity * dt
+    ensemble_preds = np.zeros((num_ensembles, B, 80, 6), dtype=np.float32)
+    
+    for n in tqdm(range(num_ensembles), desc="Ensemble Sampling"):
+        x_t = torch.randn(B, 80, 6).to(DEVICE)
+        dt = 1.0 / steps
         
-    preds_norm = x_t.cpu().numpy()
-    preds_denorm = preds_norm * m_std + m_mean
+        for i in range(steps):
+            t_tensor = torch.full((B, 1), i / steps, device=DEVICE)
+            velocity = model.vector_field(t_tensor, x_t, context)
+            x_t = x_t + velocity * dt
+            
+        ensemble_preds[n] = x_t.cpu().numpy()
+        
+    preds_mean_norm = np.mean(ensemble_preds, axis=0)
+    preds_denorm = preds_mean_norm * m_std + m_mean
     
     return preds_denorm
 
@@ -173,9 +180,6 @@ def plot_error_vs_depth(reals, preds, logtau):
 
 @torch.no_grad()
 def generate_dropout_figure(model, stokes_batch, region_batch, reals, logtau, s_mean, s_std, m_mean, m_std, steps=30, num_trajectories=50):
-    """
-    Genera inferencia con Modality Dropout manual (solo ve Fe I 630 nm).
-    """
     model.eval()
     
     stokes_t = torch.from_numpy(stokes_batch[0:1]).float().to(DEVICE)
@@ -231,6 +235,72 @@ def generate_dropout_figure(model, stokes_batch, region_batch, reals, logtau, s_
     plt.savefig(f"{PLOTS_DIR}/multimodal_inference_dropout_550.png", dpi=300)
     plt.close()
 
+@torch.no_grad()
+def generate_percentile_uncertainty_figure(model, stokes_batch, region_batch, reals, logtau, s_mean, s_std, m_mean, m_std, steps=30, num_trajectories=100):
+    """
+    Genera la gráfica de cuantificación de incertidumbre basada en bandas de percentiles 
+    (1 y 2 sigma).
+    """
+    model.eval()
+    
+    stokes_t = torch.from_numpy(stokes_batch[0:1]).float().to(DEVICE)
+    region_t = torch.from_numpy(region_batch[0:1]).to(DEVICE)
+    real_atmos = reals[0]
+    
+    s_mean_t = torch.from_numpy(s_mean).float().to(DEVICE).unsqueeze(0)
+    s_std_t = torch.from_numpy(s_std).float().to(DEVICE).unsqueeze(0)
+    
+    stokes_norm = (stokes_t - s_mean_t) / (s_std_t + 1e-6)
+    
+    mask = torch.zeros((1, region_t.shape[1]), dtype=torch.bool).to(DEVICE)
+    context = model.encoder(stokes_norm, region_t, padding_mask=mask)
+    
+    trajectories = []
+    for _ in tqdm(range(num_trajectories), desc="Sampling Percentile Trajectories"):
+        x_t = torch.randn(1, 80, 6).to(DEVICE)
+        dt = 1.0 / steps
+        for i in range(steps):
+            t_tensor = torch.full((1, 1), i / steps, device=DEVICE)
+            velocity = model.vector_field(t_tensor, x_t, context)
+            x_t = x_t + velocity * dt
+            
+        pred_denorm = x_t.cpu().numpy()[0] * m_std[0, 0, :] + m_mean[0, 0, :]
+        trajectories.append(pred_denorm)
+        
+    trajectories = np.array(trajectories) # (num_trajectories, 80, 6)
+    
+    p2_5 = np.percentile(trajectories, 2.5, axis=0)   # 50 - 95/2 (Límite inferior 2-sigma)
+    p16 = np.percentile(trajectories, 16.0, axis=0)   # 50 - 68/2 (Límite inferior 1-sigma)
+    p50 = np.percentile(trajectories, 50.0, axis=0)   # Mediana (Percentil 50)
+    p84 = np.percentile(trajectories, 84.0, axis=0)   # 50 + 68/2 (Límite superior 1-sigma)
+    p97_5 = np.percentile(trajectories, 97.5, axis=0) # 50 + 95/2 (Límite superior 2-sigma)
+    
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig.suptitle('Bayesian Uncertainty Quantification via Stratified Atmospheric Percentiles', fontsize=16)
+    
+    for i, ax in enumerate(axes.flatten()):
+        ax.fill_between(logtau, p2_5[:, i], p97_5[:, i], color='red', alpha=0.15, label=r'$2\sigma$ Interval (95\%)')
+        
+        ax.fill_between(logtau, p16[:, i], p84[:, i], color='red', alpha=0.35, label=r'$1\sigma$ Interval (68\%)')
+        
+        ax.plot(logtau, p50[:, i], 'r--', linewidth=2, label='AI Median ($\mu_{p50}$)')
+        
+        ax.plot(logtau, real_atmos[:, i], 'k-', linewidth=2, label='Ground Truth')
+        
+        ax.set_title(PHYSICAL_LABELS[i])
+        ax.set_xlabel(r'$\log(\tau)$')
+        ax.grid(True, alpha=0.3)
+        
+        ax.set_xticks([1, 0, -1, -2, -3, -4, -5, -6, -7])
+        if not ax.xaxis_inverted():
+            ax.invert_xaxis()
+            
+        if i == 0: ax.legend(fontsize=10)
+        
+    plt.tight_layout()
+    plt.savefig(f"{PLOTS_DIR}/multimodal_inference_percentiles.png", dpi=300)
+    plt.close()
+
 def main():
     try:
         model = SolarFlowModel(CONFIG).to(DEVICE)
@@ -242,12 +312,13 @@ def main():
     s_mean, s_std, m_mean, m_std = setup()
     stokes, reals, logtau, region_ids, lengths = get_eval_batch(NUM_EVAL_SAMPLES)
     
-    preds = run_evaluation(model, stokes, region_ids, s_mean, s_std, m_mean, m_std, steps=30)
+    preds = run_evaluation(model, stokes, region_ids, s_mean, s_std, m_mean, m_std, steps=30, num_ensembles=NUM_ENSEMBLES)
     calculate_and_save_metrics(reals, preds, logtau)
     plot_scatter_density(reals, preds, logtau)
     plot_error_vs_depth(reals, preds, logtau)
     
     generate_dropout_figure(model, stokes, region_ids, reals, logtau, s_mean, s_std, m_mean, m_std)
-
+    generate_percentile_uncertainty_figure(model, stokes, region_ids, reals, logtau, s_mean, s_std, m_mean, m_std)
+    
 if __name__ == "__main__":
     main()

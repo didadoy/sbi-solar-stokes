@@ -3,26 +3,26 @@ Total samples: 500
 Filtered region: log(tau) [-3.0, 0.0]
 
 [Temperature (T)]
-  Global   -> RMSE: 6270.8590 | MAE: 2135.9411 | R2: -0.3441
-  Filtered -> RMSE: 1422.2319 | MAE: 972.7016 | R2: 0.0355
+  Global   -> RMSE: 4976.7861 | MAE: 1507.2728 | R2: 0.1534
+  Filtered -> RMSE: 1150.6320 | MAE: 620.8698 | R2: 0.3687
 
 [V. Micro (vmic)]
-  Global   -> RMSE: 0.6222 | MAE: 0.4776 | R2: 0.0211
-  Filtered -> RMSE: 0.5301 | MAE: 0.4013 | R2: 0.3106
+  Global   -> RMSE: 0.4655 | MAE: 0.3538 | R2: 0.4521
+  Filtered -> RMSE: 0.3823 | MAE: 0.2849 | R2: 0.6414
 
 [Velocity (v)]
-  Global   -> RMSE: 2.3475 | MAE: 1.6240 | R2: 0.4154
-  Filtered -> RMSE: 1.5187 | MAE: 1.0178 | R2: 0.7505
+  Global   -> RMSE: 1.8160 | MAE: 1.1749 | R2: 0.6501
+  Filtered -> RMSE: 1.2447 | MAE: 0.6967 | R2: 0.8324
 
 [Bx]
-  Global   -> RMSE: 396.5426 | MAE: 280.9866 | R2: 0.1921
-  Filtered -> RMSE: 271.3443 | MAE: 181.1837 | R2: 0.6066
+  Global   -> RMSE: 304.1241 | MAE: 204.7613 | R2: 0.5248
+  Filtered -> RMSE: 199.8388 | MAE: 118.6250 | R2: 0.7866
 
 [By]
-  Global   -> RMSE: 578.3941 | MAE: 406.5571 | R2: 0.3163
-  Filtered -> RMSE: 394.8601 | MAE: 264.7052 | R2: 0.6905
+  Global   -> RMSE: 427.9117 | MAE: 287.6883 | R2: 0.6258
+  Filtered -> RMSE: 280.4460 | MAE: 174.5376 | R2: 0.8439
 
 [Bz]
-  Global   -> RMSE: 568.8212 | MAE: 398.8240 | R2: 0.2729
-  Filtered -> RMSE: 381.9538 | MAE: 258.4998 | R2: 0.6742
+  Global   -> RMSE: 432.4919 | MAE: 284.6467 | R2: 0.5797
+  Filtered -> RMSE: 271.2575 | MAE: 173.1803 | R2: 0.8357
 
