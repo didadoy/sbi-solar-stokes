@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from dataset import MultimodalSolarDataset
 from models import SolarFlowModel
+from preprocessing import DEFAULT_NOISE_SIGMA
 
 CONFIG = {
     'batch_size': 128,
@@ -15,8 +16,10 @@ CONFIG = {
     'context_dim': 64,
     'physical_dim': 6,
     'depth_points': 80,
+    'noise_sigma': DEFAULT_NOISE_SIGMA,
+    'seed': 0,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'save_dir': './checkpoints_physical_noise'
+    'save_dir': './checkpoints_region_norm'
 }
 
 def create_modality_dropout_mask(batch_lengths, dropout_prob=0.3):
@@ -40,22 +43,28 @@ def create_modality_dropout_mask(batch_lengths, dropout_prob=0.3):
 
 def train():
     os.makedirs(CONFIG['save_dir'], exist_ok=True)
+    torch.manual_seed(CONFIG['seed'])
+    np.random.seed(CONFIG['seed'])
     print(f"--- Starting Multimodal Training on {CONFIG['device']} ---")
     
     dataset = MultimodalSolarDataset(
         master_h5_file='./dataset/multimodal_stokes_training.h5',
         models_h5_file='./dataset/database_models/models_training.h5',
         good_profiles_file='./dataset/database_630/good_profiles_training.npy',
-        stats_file='normalization_stats.npz'
+        stats_file='normalization_stats.npz',
+        noise_sigma=CONFIG['noise_sigma']
     )
     
-    loader = DataLoader(dataset, batch_size=CONFIG['batch_size'], shuffle=True, num_workers=2, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=CONFIG['batch_size'], shuffle=True,
+                        num_workers=8, pin_memory=True, persistent_workers=True,
+                        prefetch_factor=4)
     
     model = SolarFlowModel(CONFIG).to(CONFIG['device'])
     optimizer = AdamW(model.parameters(), lr=CONFIG['lr'])
     
     print(f"Model created. Trainable parameters: {sum(p.numel() for p in model.parameters())}")
     
+    loss_history = []
     for epoch in range(CONFIG['epochs']):
         model.train()
         epoch_loss = 0
@@ -89,7 +98,9 @@ def train():
             pbar.set_postfix({'loss': f"{loss.item():.4f}"})
             
         avg_loss = epoch_loss / len(loader)
+        loss_history.append(avg_loss)
         print(f"Epoch {epoch+1} Final Loss: {avg_loss:.6f}")
+        np.save(f"{CONFIG['save_dir']}/loss_history.npy", np.array(loss_history))
         
         if (epoch + 1) % 5 == 0:
             torch.save(model.state_dict(), f"{CONFIG['save_dir']}/multimodal_ep{epoch+1}.pth")

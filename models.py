@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import math
 
-import torch
-import torch.nn as nn
 
 class MultimodalStokesEmbedding(nn.Module):
     def __init__(self, input_channels=4, max_seq_length=500, d_model=128, nhead=4, num_layers=3, output_dim=64, num_regions=3):
@@ -28,9 +24,9 @@ class MultimodalStokesEmbedding(nn.Module):
 
     def forward(self, stokes, region_ids, padding_mask=None):
         """
-        stokes: (Batch, 4, L) -> Los perfiles de luz
-        region_ids: (Batch, L) -> Array lleno de 0s, 1s y 2s indicando la región de cada punto
-        padding_mask: (Batch, L) -> Booleanos. True = "Ignora este punto" (Modality Dropout)
+        stokes: (Batch, 4, L) -> the Stokes profiles
+        region_ids: (Batch, L) -> 0s, 1s and 2s marking the spectral region of each point
+        padding_mask: (Batch, L) -> True means "ignore this point" (modality dropout)
         """
         B, _, L = stokes.shape
         
@@ -58,10 +54,7 @@ class MultimodalStokesEmbedding(nn.Module):
         return context
 
 class VectorFieldNetwork(nn.Module):
-    """
-    Predice el campo vectorial v(x, t|cond).
-    Aprende a mover los datos desde ruido gaussiano hacia la distribución de atmósferas.
-    """
+    """Predicts the vector field v(x, t|cond) transporting Gaussian noise to atmospheres."""
     def __init__(self, physical_dim=6, depth_points=80, context_dim=128, hidden_dim=512):
         super().__init__()
         
@@ -87,9 +80,9 @@ class VectorFieldNetwork(nn.Module):
 
     def forward(self, t, x, context):
         """
-        t: (Batch, 1) o float
-        x: (Batch, 80, 6) -> Atmósfera actual
-        context: (Batch, context_dim) -> Embedding de Stokes
+        t: (Batch, 1) or float
+        x: (Batch, 80, 6) -> current atmosphere
+        context: (Batch, context_dim) -> Stokes embedding
         """
         x_flat = x.view(x.shape[0], -1)
         

@@ -3,5 +3,7 @@ dataset/
 *.fits
 
 plots/
+checkpoints*/
+*.log
 __pycache__/
 *.pyc
